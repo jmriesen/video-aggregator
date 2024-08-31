@@ -39,7 +39,7 @@ async fn request_videos(client: &reqwest::Client, record: &Record) -> YouTubeRes
             ("part", "id,snippet"),
             ("order", "date"),
             ("maxResults", "20"),
-            ("key", ""),
+            ("key", &std::fs::read_to_string("secrets/key.txt").unwrap()),
             ("channelId", ""),
             ("publishedAfter", "2024-08-29T02:00:08Z"),
         ])
