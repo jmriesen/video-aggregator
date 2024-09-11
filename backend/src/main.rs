@@ -1,4 +1,6 @@
 #![feature(duration_constructors)]
+mod find_new;
+
 use std::str::FromStr;
 
 use actix_web::{
@@ -9,54 +11,36 @@ use actix_web::{
 };
 use chrono::{DateTime, Utc};
 use futures_util::future::FutureExt;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-#[derive(Deserialize, PartialEq)]
-struct Id {
-    #[serde(rename = "videoId")]
-    id: String,
-}
-#[derive(Deserialize, PartialEq)]
-struct Snippet {
-    #[serde(rename = "publishedAt")]
-    published_at: DateTime<Utc>,
-}
 
-#[derive(Deserialize)]
-struct Items {
-    id: Id,
-    snippet: Snippet,
-}
-
-#[derive(Deserialize)]
-struct YouTubeResponse {
-    items: Vec<Items>,
-}
 #[derive(Deserialize, Serialize)]
 struct Record {
-    channel: String,
-    id: String,
-    last_viewed: Option<chrono::DateTime<Utc>>,
+    channel: Channel,
+    last_viewed: Option<DateTime<Utc>>,
 }
 
-async fn request_videos(client: &reqwest::Client, record: &Record) -> YouTubeResponse {
-    let mut request = client
-        .get("https://www.googleapis.com/youtube/v3/search")
-        .query(&[
-            ("part", "id,snippet"),
-            ("order", "date"),
-            ("maxResults", "20"),
-            ("key", &std::fs::read_to_string("secrets/key.txt").unwrap()),
-            ("channelId", &record.id),
-        ]);
-    if let Some(timestamp) = &record.last_viewed {
-        request = request.query(&[(
-            "publishedAfter",
-            *timestamp + std::time::Duration::from_mins(1),
-        )]);
-    }
+//video string internal Id.
+#[derive(Deserialize, Serialize)]
+struct Video(String);
 
-    let response = request.send().await.unwrap().text().await.unwrap();
-    serde_json::from_str(&response).unwrap()
+#[derive(Deserialize, Serialize)]
+struct Channel {
+    id: String,
+    name: String,
+}
+
+impl Record {
+    async fn get_new_videos(&mut self, client: &Client) -> impl Iterator<Item = Video> {
+        let mut channels_videos = find_new::call(&client, &self.channel, self.last_viewed).await;
+
+        //pull out the published time of the most recent video
+        let newest_video = channels_videos.next();
+        if let Some((_, time_stamp)) = &newest_video {
+            self.last_viewed = Some(*time_stamp);
+        }
+        newest_video.into_iter().chain(channels_videos).map(|x| x.0)
+    }
 }
 
 #[get("/videos")]
@@ -67,28 +51,14 @@ async fn videos() -> impl Responder {
 
     let client = reqwest::Client::new();
 
-    //NOTE Async iterators are nightly only
-    //Consider replacing once Async iters are stable.
-    let mut responses = vec![];
+    let mut channel_videos = vec![];
     for record in &mut records {
-        let response = request_videos(&client, record).await;
-        //pull out the published time of the most recent video
-        let most_resent_video_time = response.items.first().map(|item| item.snippet.published_at);
-        if most_resent_video_time.is_some() {
-            record.last_viewed = most_resent_video_time;
-        }
-        responses.push(response);
+        channel_videos.extend(record.get_new_videos(&client).await)
     }
+
     std::fs::write(RECORD_FILE, serde_json::to_string_pretty(&records).unwrap()).unwrap();
 
-    let ids = responses
-        .iter()
-        .map(|x| x.items.iter())
-        .flatten()
-        .map(|x| x.id.id.clone())
-        .collect::<Vec<String>>();
-
-    web::Json(ids)
+    web::Json(channel_videos)
 }
 
 #[get("/{name}")]
