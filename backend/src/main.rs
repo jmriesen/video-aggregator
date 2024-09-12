@@ -1,4 +1,5 @@
 #![feature(duration_constructors)]
+mod file_backed;
 mod find_new;
 
 use std::str::FromStr;
@@ -46,17 +47,15 @@ impl Record {
 #[get("/videos")]
 async fn videos() -> impl Responder {
     const RECORD_FILE: &'static str = "records/records.json";
-    let mut records: Vec<Record> =
-        serde_json::from_str(&std::fs::read_to_string(RECORD_FILE).unwrap()).unwrap();
+    let mut records =
+        file_backed::FileBacked::<Vec<Record>>::new(&std::path::Path::new(RECORD_FILE));
 
     let client = reqwest::Client::new();
 
     let mut channel_videos = vec![];
-    for record in &mut records {
+    for record in records.as_mut().iter_mut() {
         channel_videos.extend(record.get_new_videos(&client).await)
     }
-
-    std::fs::write(RECORD_FILE, serde_json::to_string_pretty(&records).unwrap()).unwrap();
 
     web::Json(channel_videos)
 }
@@ -71,9 +70,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .wrap_fn(|req, srv| {
-                println!("Hi from start. You requested: {}", req.path());
                 srv.call(req).map(|res| {
-                    println!("Hi from response");
                     res.map(|mut x| {
                         x.headers_mut().append(
                             HeaderName::from_str("Access-Control-Allow-Origin").unwrap(),
