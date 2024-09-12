@@ -1,6 +1,7 @@
 #![feature(duration_constructors)]
 mod file_backed;
 mod find_new;
+mod length_filter;
 
 use std::str::FromStr;
 
@@ -54,7 +55,9 @@ async fn videos() -> impl Responder {
 
     let mut channel_videos = vec![];
     for record in records.as_mut().iter_mut() {
-        channel_videos.extend(record.get_new_videos(&client).await)
+        let all_videos = record.get_new_videos(&client).await;
+        let filtered_videos = length_filter::call(&client, &all_videos.collect::<Vec<_>>()).await;
+        channel_videos.extend(filtered_videos)
     }
 
     web::Json(channel_videos)

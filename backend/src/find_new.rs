@@ -4,25 +4,25 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 #[derive(Deserialize, PartialEq)]
-pub struct Id {
+struct Id {
     #[serde(rename = "videoId")]
     pub id: String,
 }
 
 #[derive(Deserialize, PartialEq)]
-pub struct Snippet {
+struct Snippet {
     #[serde(rename = "publishedAt")]
     pub published_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
-pub struct Items {
+struct Items {
     pub id: Id,
     pub snippet: Snippet,
 }
 
 #[derive(Deserialize)]
-pub struct Response {
+struct Response {
     pub items: Vec<Items>,
 }
 
@@ -38,8 +38,8 @@ pub async fn call(
             ("part", "id,snippet"),
             ("order", "date"),
             ("maxResults", "20"),
-            ("key", &std::fs::read_to_string("secrets/key.txt").unwrap()),
             ("channelId", &channel.id),
+            ("key", &std::fs::read_to_string("secrets/key.txt").unwrap()),
         ]);
     let published_after = published_after.map(|x| x + std::time::Duration::from_mins(1));
     if let Some(time_stamp) = published_after {
