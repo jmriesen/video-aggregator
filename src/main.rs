@@ -72,7 +72,6 @@ async fn index(hb: web::Data<Handlebars<'_>>) -> impl Responder {
     let links = json!({
     "videos":links
     });
-    println!("{links}");
     let body = hb.render("index", &links).unwrap();
 
     web::Html::new(body)

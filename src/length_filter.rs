@@ -50,15 +50,9 @@ pub async fn call(client: &reqwest::Client, videos: &[Video]) -> impl Iterator<I
         // Include if 1 minute < duration <= 1 hour.
         // See google API for format documentation
         // [[https://developers.google.com/youtube/v3/docs/videos]]
-        .inspect(|x| {
-            dbg!(x);
-        })
         .filter(|(_, duration)| {
             //No hour component && minute component but not exactly 1 minute
             !duration.contains("H") && duration.contains("M") && duration != "PT1M"
-        })
-        .inspect(|x| {
-            dbg!(x);
         })
         .map(|(id, _)| Video(id))
 }
