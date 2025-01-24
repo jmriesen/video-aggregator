@@ -1,6 +1,5 @@
 /target
 **/.DS_Store
-frontend/dist
-/backend/records/
-/backend/secrets/
+records/
+secrets/
 TODOs.org
