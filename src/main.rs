@@ -61,10 +61,6 @@ async fn get_videos() -> Vec<Video> {
     }
     channel_videos
 }
-#[get("/videos")]
-async fn videos() -> impl Responder {
-    web::Json(get_videos().await)
-}
 
 #[get("/")]
 async fn index(hb: web::Data<Handlebars<'_>>) -> impl Responder {
@@ -119,7 +115,6 @@ async fn main() -> std::io::Result<()> {
             })
             .app_data(handlebars_ref.clone())
             //res.headers_mut().append("Access-Control-Allow-Origin", "*");
-            .service(videos)
             .service(index)
     })
     .bind(("127.0.0.1", 8081))?
