@@ -13,8 +13,10 @@ use actix_web::{
 };
 use chrono::{DateTime, Utc};
 use futures_util::future::FutureExt;
+use handlebars::{DirectorySourceOptions, Handlebars};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[derive(Deserialize, Serialize)]
 struct Record {
@@ -44,9 +46,7 @@ impl Record {
         newest_video.into_iter().chain(channels_videos).map(|x| x.0)
     }
 }
-
-#[get("/videos")]
-async fn videos() -> impl Responder {
+async fn get_videos() -> Vec<Video> {
     const RECORD_FILE: &'static str = "records/records.json";
     let mut records =
         file_backed::FileBacked::<Vec<Record>>::new(&std::path::Path::new(RECORD_FILE));
@@ -59,18 +59,44 @@ async fn videos() -> impl Responder {
         let filtered_videos = length_filter::call(&client, &all_videos.collect::<Vec<_>>()).await;
         channel_videos.extend(filtered_videos)
     }
-
-    web::Json(channel_videos)
+    channel_videos
+}
+#[get("/videos")]
+async fn videos() -> impl Responder {
+    web::Json(get_videos().await)
 }
 
-#[get("/{name}")]
-async fn hello(name: web::Path<String>) -> impl Responder {
-    format!("Hello {}!", &name)
+#[get("/")]
+async fn index(hb: web::Data<Handlebars<'_>>) -> impl Responder {
+    let video_list = get_videos().await;
+    let links: Vec<_> = video_list
+        .iter()
+        .map(|x| format!("https://www.youtube.com/embed/{}?autoplay=0&mute=0", x.0))
+        .collect();
+    let links = json!({
+    "videos":links
+    });
+    println!("{links}");
+    let body = hb.render("index", &links).unwrap();
+
+    web::Html::new(body)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    let mut handlebars = Handlebars::new();
+    handlebars
+        .register_templates_directory(
+            "./templates",
+            DirectorySourceOptions {
+                tpl_extension: ".html".to_owned(),
+                hidden: false,
+                temporary: false,
+            },
+        )
+        .unwrap();
+    let handlebars_ref = web::Data::new(handlebars);
+    HttpServer::new(move || {
         App::new()
             .wrap_fn(|req, srv| {
                 srv.call(req).map(|res| {
@@ -91,9 +117,10 @@ async fn main() -> std::io::Result<()> {
                     })
                 })
             })
+            .app_data(handlebars_ref.clone())
             //res.headers_mut().append("Access-Control-Allow-Origin", "*");
             .service(videos)
-            .service(hello)
+            .service(index)
     })
     .bind(("127.0.0.1", 8081))?
     .run()
